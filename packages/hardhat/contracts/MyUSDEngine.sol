@@ -102,16 +102,42 @@ contract MyUSDEngine is Ownable {
         lastUpdateTime = block.timestamp;
     }
 
-    function _getMyUSDToShares(uint256 amount) internal view returns (uint256) {}
+    function _getMyUSDToShares(uint256 amount) internal view returns (uint256) {
+        return (amount * PRECISION) / _getCurrentExchangeRate();
+    }
 
     // Checkpoint 4: Minting MyUSD & Position Health
-    function getCurrentDebtValue(address user) public view returns (uint256) {}
+    function getCurrentDebtValue(address user) public view returns (uint256) {
+        uint256 shares = s_userDebtShares[user];
+        if(shares == 0) return 0;
+        return shares * _getCurrentExchangeRate() / PRECISION;
+    }
 
-    function calculatePositionRatio(address user) public view returns (uint256) {}
+    function calculatePositionRatio(address user) public view returns (uint256) {
+        uint256 debt_val = getCurrentDebtValue(user);
+        if(debt_val == 0) return type(uint256).max;
+        uint256 colat_val = calculateCollateralValue(user);
+        return (colat_val * PRECISION) / debt_val;
+    }
 
-    function _validatePosition(address user) internal view {}
+    function _validatePosition(address user) internal view {
+        uint256 pos_ratio = calculatePositionRatio(user);
+        if((pos_ratio * 100) < (COLLATERAL_RATIO * PRECISION)){
+            revert Engine__UnsafePositionRatio();
+        }
+    }
 
-    function mintMyUSD(uint256 mintAmount) public {}
+    function mintMyUSD(uint256 mintAmount) public {
+        if(mintAmount == 0){
+            revert Engine__InvalidAmount();
+        }
+        uint256 shares = _getMyUSDToShares(mintAmount);
+        s_userDebtShares[msg.sender] += shares;
+        totalDebtShares += shares;
+        _validatePosition(msg.sender);
+        i_myUSD.mintTo(msg.sender, mintAmount);
+        emit DebtSharesMinted(msg.sender, mintAmount, shares);
+    }
 
     // Checkpoint 5: Accruing Interest & Managing Borrow Rates
     function setBorrowRate(uint256 newRate) external onlyRateController {}

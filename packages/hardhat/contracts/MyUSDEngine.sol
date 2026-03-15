@@ -70,14 +70,37 @@ contract MyUSDEngine is Ownable {
     }
 
     // Checkpoint 2: Depositing Collateral & Understanding Value
-    function addCollateral() public payable {}
+    function addCollateral() public payable {
+        if(msg.value == 0){
+            revert Engine__InvalidAmount();
+        }
+        s_userCollateral[msg.sender] += msg.value;
+        emit CollateralAdded(msg.sender, msg.value, i_oracle.getETHUSDPrice());
+    }
 
-    function calculateCollateralValue(address user) public view returns (uint256) {}
+    function calculateCollateralValue(address user) public view returns (uint256) {
+        uint256 ethPrice = i_oracle.getETHUSDPrice();
+        uint256 amount = s_userCollateral[user];
+        return (amount * ethPrice) / PRECISION;
+    }
 
     // Checkpoint 3: Interest Calculation System
-    function _getCurrentExchangeRate() internal view returns (uint256) {}
+    function _getCurrentExchangeRate() internal view returns (uint256) {
+        if(totalDebtShares == 0) return debtExchangeRate;
+        uint256 timeElapsed = block.timestamp - lastUpdateTime;
+        uint256 debt = totalDebtShares * debtExchangeRate / PRECISION;
+        uint256 interest = debt * borrowRate * timeElapsed / (SECONDS_PER_YEAR * 10000);
+        return debtExchangeRate + (interest * PRECISION) / totalDebtShares;
+    }
 
-    function _accrueInterest() internal {}
+    function _accrueInterest() internal {
+        if (totalDebtShares == 0) {
+            lastUpdateTime = block.timestamp;
+            return;
+        }
+        debtExchangeRate = _getCurrentExchangeRate();
+        lastUpdateTime = block.timestamp;
+    }
 
     function _getMyUSDToShares(uint256 amount) internal view returns (uint256) {}
 
